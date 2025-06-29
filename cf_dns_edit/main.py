@@ -1028,7 +1028,7 @@ class CFDNSEditApp(App):
                     timeout=2,
                 )
                 self.cf_instance = None
-                token_input = self.query_one("#token-input", Input).value = ""
+                self.query_one("#token-input", Input).value = ""
                 self.push_screen("login")
         else:
             self.push_screen("login")
