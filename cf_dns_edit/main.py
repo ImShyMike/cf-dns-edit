@@ -1,25 +1,76 @@
 """Main entry point for cf-dns-edit."""
 
+import logging
 import os
 import sys
+from typing import List
 
 import click
 from cloudflare import Cloudflare
+from cloudflare.types.zones.zone import Zone
 from dotenv import load_dotenv
 from textual.app import App, ComposeResult
 from textual.containers import Container, Vertical
 from textual.screen import Screen
 from textual.validation import ValidationResult, Validator
-from textual.widgets import Button, Footer, Input, Link, LoadingIndicator, Static
+from textual.widgets import Button, Footer, Input, Link, OptionList, Static
+from textual.widgets.option_list import Option
 
 from cf_dns_edit.__about__ import __version__
 
 load_dotenv()
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.ERROR)
+
 MIN_SCREEN_SIZE = (71, 32)  # magic numbers :D
 TOKEN = os.getenv("CLOUDFLARE_API_TOKEN")
 
-cf = Cloudflare(api_token=TOKEN)
+
+def pluralize(count: int, word: str) -> str:
+    """Return the pluralized form of a word based on count."""
+    return f"{count} {word}{'s' if count != 1 else ''}"
+
+
+def get_dns_records(cloudflare: Cloudflare, zone_id: str) -> List:
+    """Get DNS records for a specific zone."""
+    try:
+        logger.info("Loading DNS records...")
+        records = []
+
+        for record in cloudflare.dns.records.list(zone_id=zone_id):
+            records.append(record)
+
+        logger.info("Found %s.", pluralize(len(records), "DNS record"))
+        return records
+    except Exception as e:  # pylint: disable=broad-except
+        logger.error("Failed to get DNS records: %s", e)
+        return []
+
+
+def load_all_domains(
+    cloudflare: Cloudflare,
+) -> List[Zone]:
+    """Load all domains from Cloudflare."""
+    try:
+        logger.info("Loading domains from Cloudflare...")
+        zones = []
+
+        for zone in cloudflare.zones.list():
+            zones.append(zone)
+
+        if not zones:
+            logger.info("No domains found in your Cloudflare account.")
+        else:
+            logger.info("Found %s.", pluralize(len(zones), "domain"))
+        return zones
+    except Exception as e:  # pylint: disable=broad-except
+        logger.error("Failed to load domains: %s", e)
+        return []
 
 
 class ApiTokenValidator(Validator):
@@ -93,7 +144,7 @@ class LoginScreen(Screen):
     def compose(self) -> ComposeResult:
         with Container(id="login-container"):
             with Vertical():
-                yield Static("🔐 Login to Cloudflare", id="login-title")
+                yield Static("🔐 Login with Cloudflare", id="login-title")
                 yield Static("API Token:")
                 yield Input(
                     placeholder="Enter your Cloudflare API token",
@@ -146,13 +197,12 @@ class LoginScreen(Screen):
         success = await self.verify_token(token_input.value)
 
         if success:
-            self.app.notify("✅ Login successful!")
+            self.app.notify("✅ Login successful!", timeout=1)
             self.app.push_screen("manage")
         else:
             self.app.notify(
                 "❌ Invalid api key, please try again.", severity="error", timeout=2
             )
-
 
     def action_login(self) -> None:
         """Handle login action."""
@@ -164,21 +214,21 @@ class LoginScreen(Screen):
             cf_instance = Cloudflare(api_token=token)
             cf_instance.user.tokens.verify()
             app = self.app
-            if hasattr(app, 'cf_instance'):
+            if hasattr(app, "cf_instance"):
                 app.cf_instance = cf_instance  # type: ignore # pylint: disable=attribute-defined-outside-init
             return True
         except Exception:  # pylint: disable=broad-except
             app = self.app
-            if hasattr(app, 'cf_instance'):
+            if hasattr(app, "cf_instance"):
                 app.cf_instance = None  # type: ignore # pylint: disable=attribute-defined-outside-init
             return False
 
 
-class DnsManagementScreen(Screen):
+class DomainManagementScreen(Screen):
     """Main DNS management screen."""
 
     CSS = """
-    DnsManagementScreen {
+    DomainManagementScreen {
         layout: horizontal;
     }
     
@@ -207,6 +257,11 @@ class DnsManagementScreen(Screen):
         margin-bottom: 1;
     }
     
+    #domains-list {
+        height: 100%;
+        margin-top: 1;
+    }
+    
     Button {
         width: 95%;
         margin: 1;
@@ -218,6 +273,8 @@ class DnsManagementScreen(Screen):
         ("ctrl+c", "app.quit", "Quit"),
         ("a", "about", "About"),
         ("l", "logout", "Logout"),
+        ("e", "edit_domain", "Edit Domain"),
+        ("r", "refresh_domains", "Refresh Domains"),
     ]
 
     def compose(self) -> ComposeResult:
@@ -226,33 +283,79 @@ class DnsManagementScreen(Screen):
                 with Vertical():
                     yield Static("📚 DNS Records Manager", id="title")
                     yield Static("")
-                    yield Button("📋 List DNS Records", id="list")
-                    yield Button("➕ Add DNS Record", id="add")
-                    yield Button("✏️  Update DNS Record", id="update")
-                    yield Button("🗑️  Delete DNS Record", id="delete")
+                    yield Button("✏️  Manage DNS Records", id="edit")
                     yield Static("")
                     yield Button("ℹ️  About", id="about-btn")
                     yield Button("🚪 Logout", id="logout-btn")
             with Container(id="info-panel"):
                 with Vertical():
-                    yield Static("Cloudflare DNS Manager", id="info-title")
+                    yield Static("🌐 Your Cloudflare Domains", id="info-title")
                     yield Static("")
-                    yield Static("This is a placeholder")
+                    yield OptionList(id="domains-list")
+
+    def on_mount(self) -> None:
+        """Load domains when the screen is mounted."""
+        self.load_domains()
+
+    def load_domains(self) -> None:
+        """Load and display domains in the OptionList."""
+        cloudflare: Cloudflare | None = self.app.cf_instance  # type: ignore
+
+        if cloudflare is None:
+            self.app.notify("❌ Unknown error, please log back in.", severity="error")
+            self.app.push_screen("login")
+            return
+
+        domains = load_all_domains(cloudflare)
+        domains_list = self.query_one("#domains-list", OptionList)
+        domains_list.clear_options()
+
+        if domains:
+            domain_count = len(domains)
+            for i, domain in enumerate(domains):
+                domains_list.add_option(Option(domain.name, id=domain.id))
+                if i < domain_count - 1:
+                    domains_list.add_option(None)
+            domains_list.highlighted = 0
+        else:
+            domains_list.add_option(Option("No domains found", disabled=True))
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Button handling for the book screen."""
-        if event.button.id == "list":
-            self.app.notify("📋 Listing DNS records...")
-        elif event.button.id == "add":
-            self.app.notify("➕ Adding DNS record...")
-        elif event.button.id == "update":
-            self.app.notify("✏️ Updating DNS record...")
-        elif event.button.id == "delete":
-            self.app.notify("🗑️ Deleting DNS record...")
-        elif event.button.id == "about-btn":
+        """Button handling for the DNS management screen."""
+        cloudflare: Cloudflare | None = self.app.cf_instance  # type: ignore
+
+        if event.button.id == "about-btn":
             self.app.push_screen("about")
         elif event.button.id == "logout-btn":
             self.action_logout()
+
+        if cloudflare is None:
+            self.app.notify("❌ Unknown error, please log back in.", severity="error")
+            self.app.push_screen("login")
+            return
+
+        if event.button.id == "edit":
+            domains_list = self.query_one("#domains-list", OptionList)
+            selected_index = domains_list.highlighted
+
+            if selected_index is not None and selected_index >= 0:
+                try:
+                    selected_option = domains_list.get_option_at_index(selected_index)
+                    if selected_option and selected_option.id is not None:
+                        domain_name = str(selected_option.prompt)
+                        domain_id = str(selected_option.id)
+                        dns_screen = DnsManagementScreen(domain_id, domain_name)
+                        self.app.push_screen(dns_screen)
+                    else:
+                        self.app.notify(
+                            "❌ Invalid domain selection", severity="warning"
+                        )
+                except Exception:  # pylint: disable=broad-except
+                    self.app.notify(
+                        "❌ Error getting selected domain", severity="error"
+                    )
+            else:
+                self.app.notify("❌ Please select a domain first", severity="warning")
 
     def action_about(self) -> None:
         """Show about screen."""
@@ -265,6 +368,243 @@ class DnsManagementScreen(Screen):
             self.app.pop_screen()
         if not isinstance(self.app.screen, LoginScreen):
             self.app.push_screen("login")
+
+    def action_edit_domain(self) -> None:
+        """Edit the selected domain via keyboard shortcut."""
+        domains_list = self.query_one("#domains-list", OptionList)
+        selected_index = domains_list.highlighted
+
+        if selected_index is not None and selected_index >= 0:
+            try:
+                selected_option = domains_list.get_option_at_index(selected_index)
+                if selected_option and selected_option.id is not None:
+                    domain_name = str(selected_option.prompt)
+                    domain_id = str(selected_option.id)
+                    dns_screen = DnsManagementScreen(domain_id, domain_name)
+                    self.app.push_screen(dns_screen)
+                else:
+                    self.app.notify("❌ Invalid domain selection", severity="warning")
+            except Exception:  # pylint: disable=broad-except
+                self.app.notify("❌ Error getting selected domain", severity="error")
+        else:
+            self.app.notify("❌ Please select a domain first", severity="warning")
+
+    def action_refresh_domains(self) -> None:
+        """Refresh the domain list."""
+        self.load_domains()
+
+
+class DnsManagementScreen(Screen):
+    """DNS records management screen for a specific domain."""
+
+    CSS = """
+    DnsManagementScreen {
+        layout: horizontal;
+    }
+    
+    #main-container {
+        layout: horizontal;
+        height: 100%;
+    }
+    
+    #button-panel {
+        width: 35%;
+        align: center middle;
+        padding: 2;
+    }
+    
+    #records-panel {
+        width: 65%;
+        background: $surface;
+        border: solid $primary;
+        margin: 2;
+        padding: 2;
+    }
+    
+    #records-title {
+        text-style: bold;
+        color: $primary;
+        margin-bottom: 1;
+    }
+    
+    #records-list {
+        height: 100%;
+        margin-top: 1;
+    }
+    
+    #records-list > .option-list--option {
+        color: $text;
+    }
+    
+    #records-list > .option-list--option-highlighted {
+        color: $text;
+    }
+    
+    Button {
+        width: 95%;
+        margin: 1;
+    }
+    
+    .record-info {
+        color: $text-muted;
+        text-style: italic;
+    }
+    """
+
+    BINDINGS = [
+        ("escape", "back_to_domains", "Back to Domains"),
+        ("ctrl+c", "app.quit", "Quit"),
+        ("a", "add_record", "Add Record"),
+        ("e", "edit_record", "Edit Record"),
+        ("d", "delete_record", "Delete Record"),
+        ("r", "refresh_records", "Refresh Records"),
+    ]
+
+    def __init__(self, domain_id: str, domain_name: str) -> None:
+        """Initialize the DNS management screen."""
+        super().__init__()
+        self.domain_id = domain_id
+        self.domain_name = domain_name
+
+    def compose(self) -> ComposeResult:
+        with Container(id="main-container"):
+            with Container(id="button-panel"):
+                with Vertical():
+                    yield Static("📝 DNS Records", id="title")
+                    yield Static(f"Domain: {self.domain_name}", classes="record-info")
+                    yield Static("")
+                    yield Button("➕ Add DNS Record", id="add-record")
+                    yield Button("✏️  Edit Selected Record", id="edit-record")
+                    yield Button("🗑️  Delete Selected Record", id="delete-record")
+                    yield Button("🔄 Refresh Records", id="refresh-records")
+                    yield Static("")
+                    yield Button("⬅️  Back to Domains", id="back-btn")
+            with Container(id="records-panel"):
+                with Vertical():
+                    yield Static(
+                        f"📋 DNS Records for {self.domain_name}", id="records-title"
+                    )
+                    yield Static("")
+                    yield OptionList(id="records-list")
+
+    def on_mount(self) -> None:
+        """Load DNS records when the screen is mounted."""
+        self.load_dns_records()
+
+    def load_dns_records(self) -> None:
+        """Load and display DNS records in the OptionList."""
+        cloudflare: Cloudflare | None = self.app.cf_instance  # type: ignore
+
+        if cloudflare is None:
+            self.app.notify("❌ Unknown error, please log back in.", severity="error")
+            self.app.push_screen("login")
+            return
+
+        records = get_dns_records(cloudflare, self.domain_id)
+        records_list = self.query_one("#records-list", OptionList)
+        records_list.clear_options()
+
+        if records:
+            record_count = len(records)
+            for i, record in enumerate(records):
+                divider = "[dim cyan]|[/dim cyan]"
+
+                record_type = record.type
+                type_color = {
+                    "A": "green",
+                    "AAAA": "green",
+                    "CNAME": "blue",
+                    "MX": "magenta",
+                    "TXT": "yellow",
+                    "NS": "cyan",
+                    "SRV": "red",
+                }.get(record_type, "[white]")
+
+                record_text = (
+                    f"[{type_color}]{record.type}[/{type_color}] {divider} "
+                    f"[bold]{record.name}[/bold] {divider} {record.content}"
+                )
+
+                if hasattr(record, "ttl") and record.ttl:
+                    ttl_value = record.ttl if record.ttl != 1 else "Auto"
+                    record_text += (
+                        f" {divider} [dim yellow]TTL:[/dim yellow] {ttl_value}"
+                    )
+
+                records_list.add_option(Option(record_text, id=record.id))
+                if i < record_count - 1:
+                    records_list.add_option(None)
+            records_list.highlighted = 0
+        else:
+            records_list.add_option(Option("No DNS records found", disabled=True))
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Button handling for the DNS management screen."""
+        cloudflare: Cloudflare | None = self.app.cf_instance  # type: ignore
+
+        if cloudflare is None:
+            self.app.notify("❌ Unknown error, please log back in.", severity="error")
+            self.app.push_screen("login")
+            return
+
+        if event.button.id == "back-btn":
+            self.action_back_to_domains()
+        elif event.button.id == "add-record":
+            self.action_add_record()
+        elif event.button.id == "edit-record":
+            self.action_edit_record()
+        elif event.button.id == "delete-record":
+            self.action_delete_record()
+        elif event.button.id == "refresh-records":
+            self.action_refresh_records()
+
+    def action_back_to_domains(self) -> None:
+        """Go back to domain management screen."""
+        self.app.pop_screen()
+
+    def action_add_record(self) -> None:
+        """Add a new DNS record."""
+        self.app.notify(f"➕ Adding DNS record for {self.domain_name}...")
+        # TODO: add record
+
+    def action_edit_record(self) -> None:
+        """Edit the selected DNS record."""
+        records_list = self.query_one("#records-list", OptionList)
+        selected_index = records_list.highlighted
+
+        if selected_index is not None and selected_index >= 0:
+            try:
+                selected_option = records_list.get_option_at_index(selected_index)
+                if selected_option and selected_option.id is not None:
+                    pass
+                    # TODO: edit record
+                else:
+                    self.app.notify("❌ Invalid record selection", severity="warning")
+            except Exception:  # pylint: disable=broad-except
+                self.app.notify("❌ Error getting selected record", severity="error")
+        else:
+            self.app.notify("❌ Please select a record first", severity="warning")
+
+    def action_delete_record(self) -> None:
+        """Delete the selected DNS record."""
+        records_list = self.query_one("#records-list", OptionList)
+        selected_index = records_list.highlighted
+
+        if selected_index is not None and selected_index >= 0:
+            try:
+                selected_option = records_list.get_option_at_index(selected_index)
+                if selected_option and selected_option.id is not None:
+                    # TODO: delete record
+                else:
+                    self.app.notify("❌ Invalid record selection", severity="warning")
+            except Exception:  # pylint: disable=broad-except
+                self.app.notify("❌ Error getting selected record", severity="error")
+        else:
+            self.app.notify("❌ Please select a record first", severity="warning")
+
+    def action_refresh_records(self) -> None:
+        """Refresh the DNS records list."""
+        self.load_dns_records()
 
 
 class AboutScreen(Screen):
@@ -408,7 +748,7 @@ class CFDNSEditApp(App):
 
     SCREENS = {
         "login": LoginScreen,
-        "manage": DnsManagementScreen,
+        "manage": DomainManagementScreen,
         "about": AboutScreen,
         "screen_too_small": ScreenTooSmall,
     }
@@ -469,7 +809,7 @@ class CFDNSEditApp(App):
             else:
                 focused_link = current_screen.query_one("#token-link", Link)
                 focused_link.action_open_link()
-        elif isinstance(current_screen, DnsManagementScreen):
+        elif isinstance(current_screen, DomainManagementScreen):
             self.notify("Use buttons or keyboard shortcuts for actions")
         elif isinstance(current_screen, AboutScreen):
             self.push_screen("manage")
@@ -489,7 +829,7 @@ class CFDNSEditApp(App):
 
     async def action_pop_screen(self) -> None:
         """Override pop screen to exit on specific conditions."""
-        if isinstance(self.screen, (LoginScreen, DnsManagementScreen)):
+        if isinstance(self.screen, (LoginScreen, DomainManagementScreen)):
             self.exit()
             return
 
@@ -513,4 +853,4 @@ def cli(ctx, version=None):
 
 
 if __name__ == "__main__":
-    cli()
+    cli()  # pylint: disable=no-value-for-parameter
