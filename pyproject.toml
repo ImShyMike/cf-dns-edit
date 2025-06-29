@@ -1,6 +1,6 @@
 [project]
 name = "cf-dns-edit"
-version = "0.2.2"
+version = "0.2.3"
 description = "TUI to edit DNS records for cloudflare domains"
 readme = "README.md"
 authors = [
