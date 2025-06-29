@@ -1,0 +1,50 @@
+#title {
+    text-style: bold;
+    color: $accent;
+    margin-bottom: 1;
+    align: center middle;
+}
+
+.record-label {
+    color: $text;
+    margin-top: 1;
+    margin-bottom: 0;
+    text-style: bold;
+}
+
+.record-input {
+    width: 100%;
+    margin-bottom: 1;
+    background: $surface;
+    color: $text;
+}
+
+#proxied-label {
+    margin-top: 1;
+    margin-bottom: 0;
+}
+
+#proxied-switch {
+    margin-bottom: 1;
+}
+
+.record-btn {
+    width: 48%;
+    margin: 1 1 0 0;
+    align: center middle;
+}
+
+#save-btn {
+    background: $success;
+    color: $text;
+}
+
+#cancel-btn {
+    background: $error;
+    color: $text;
+}
+
+#record-content-input, #record-comment-input {
+    min-height: 3;
+    max-height: 5;
+}

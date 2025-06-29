@@ -10,10 +10,19 @@ from cloudflare import Cloudflare
 from cloudflare.types.zones.zone import Zone
 from dotenv import load_dotenv
 from textual.app import App, ComposeResult
-from textual.containers import Container, Vertical
+from textual.containers import Container, Vertical, Horizontal
 from textual.screen import ModalScreen, Screen
-from textual.validation import ValidationResult, Validator
-from textual.widgets import Button, Footer, Input, Link, OptionList, Static, TextArea
+from textual.validation import Integer, ValidationResult, Validator
+from textual.widgets import (
+    Button,
+    Footer,
+    Input,
+    Link,
+    OptionList,
+    Static,
+    Switch,
+    TextArea,
+)
 from textual.widgets.option_list import Option
 
 from cf_dns_edit.__about__ import __version__
@@ -26,6 +35,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.ERROR)
+logging.getLogger("httpx").setLevel(logging.ERROR)
 
 MIN_SCREEN_SIZE = (71, 25)  # magic numbers :D
 TOKEN = os.getenv("CLOUDFLARE_API_TOKEN")
@@ -351,6 +361,241 @@ class DomainManagementScreen(Screen):
         edit_btn.focus()
 
 
+class RecordValidator(Validator):
+    """Validator for record types."""
+
+    def __init__(self) -> None:
+        """Initialize the validator."""
+        super().__init__()
+
+    def describe_failure(self, failure) -> str:
+        """Return description of the failure."""
+        return "Invalid record type!"
+
+    def validate(self, value: str) -> ValidationResult:
+        """Check if the record type is valid."""
+        valid_types = [
+            "A",
+            "AAAA",
+            "CNAME",
+            "MX",
+            "DKIM",
+            "SPF",
+            "DMARC",
+            "TXT",
+            "CAA",
+            "SRV",
+            "SVCB",
+            "HTTPS",
+            "URI",
+            "PTR",
+            "NAPTR",
+            "SOA",
+            "NS",
+            "DS",
+            "DNSKEY",
+            "SSHFP",
+            "TLSA",
+            "SMIMEA",
+            "CERT",
+        ]
+        if value.strip().upper() in valid_types:
+            return self.success()
+        return self.failure("Invalid record type.")
+
+    def error_message(self) -> str:
+        """Return the error message for invalid input."""
+        return "API Token cannot be empty."
+
+
+class RecordManagementScreen(Screen):
+    """Main DNS management screen."""
+
+    CSS_PATH = "tcss/record_management.tcss"
+
+    BINDINGS = [
+        ("escape", "app.pop_screen", "Back"),
+        ("ctrl+c", "app.quit", "Quit"),
+        ("enter", "click_focused_button", "Click Button"),
+    ]
+
+    def __init__(self, is_create: bool, record=None, zone_id=None) -> None:
+        """Initialize the record management screen."""
+        super().__init__()
+        self.is_create = is_create  # create or edit
+        self.zone_id = zone_id  # type: ignore
+        self.record = record  # type: ignore
+
+    def compose(self) -> ComposeResult:
+        yield Static(
+            f"📝 {'Create' if self.is_create else 'Edit'} DNS Record",
+            id="title",
+        )
+        with Horizontal(id="top-row"):
+            with Vertical():
+                yield Static(
+                    content=f"{'Create' if self.is_create else 'Edit'} DNS Record",
+                    id="record-type-label",
+                    classes="record-label",
+                )
+                yield Input(
+                    placeholder="A",
+                    value=self.record.type if self.record and self.record.type else "",
+                    id="record-type-input",
+                    classes="record-input",
+                    validate_on=["changed"],
+                    validators=[RecordValidator()],
+                )
+            with Vertical():
+                yield Static(
+                    content="Proxied:",
+                    id="proxied-label",
+                    classes="record-label",
+                )
+                yield Switch(
+                    value=self.record.proxied if self.record and self.record.proxied else False,
+                    animate=True,
+                    id="proxied-switch",
+                    classes="record-input",
+                )
+        with Horizontal(id="middle-row"):
+            with Vertical():
+                yield Static(
+                    content="Name:",
+                    id="record-name-label",
+                    classes="record-label",
+                )
+                yield Input(
+                    value=self.record.name if self.record and self.record.name else "",
+                    placeholder="example.com",
+                    id="record-name-input",
+                    classes="record-input",
+                )
+            with Vertical():
+                yield Static(
+                    content="TTL (Time to Live):",
+                    id="ttl-label",
+                    classes="record-label",
+                )
+                yield Input(
+                    value=str(self.record.ttl) if self.record and self.record.ttl else "1",
+                    placeholder="1",
+                    id="record-ttl-input",
+                    classes="record-input",
+                    validate_on=["changed"],
+                    validators=[
+                        Integer(
+                            failure_description="TTL must be a positive number", minimum=1
+                        )
+                    ],
+                )
+        yield Static(
+            content="Content:",
+            id="record-content-label",
+            classes="record-label",
+        )
+        yield TextArea(
+            text=self.record.content if self.record and self.record.content else "",
+            id="record-content-input",
+            classes="record-input",
+        )
+        yield Static(
+            content="Comment:",
+            id="record-comment-label",
+            classes="record-label",
+        )
+        yield TextArea(
+            text=self.record.comment if self.record and self.record.comment else "",
+            id="record-comment-input",
+            classes="record-input",
+        )
+        with Horizontal(id="button-row"):
+            yield Button(
+                "Cancel",
+                id="cancel-btn",
+                variant="default",
+                classes="record-btn",
+            )
+            yield Button(
+                f"{'Create' if self.is_create else 'Save'} Record",
+                id="save-btn",
+                variant="primary",
+                classes="record-btn",
+            )
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Button handling."""
+        cloudflare: Cloudflare | None = self.app.cf_instance  # type: ignore
+
+        if event.button.id == "save-btn":
+            if not cloudflare:
+                self.app.notify(
+                    "❌ Unknown error, please log back in.", severity="error"
+                )
+                self.app.push_screen("login")
+                return
+
+            new_type = self.query_one("#record-type-input", Input).value.strip().upper()
+            new_name = self.query_one("#record-name-input", Input).value.strip()
+            new_content = self.query_one("#record-content-input", TextArea).text.strip()
+            new_proxied = self.query_one("#proxied-switch", Switch).value
+            new_comment = self.query_one("#record-comment-input", TextArea).text.strip()
+            try:
+                new_ttl = int(self.query_one("#record-ttl-input", Input).value.strip())
+            except ValueError:
+                self.app.notify("❌ TTL must be a positive integer.", severity="error")
+                return
+
+            if self.is_create:
+                try:
+                    cloudflare.dns.records.create(  # type: ignore
+                        zone_id=str(self.zone_id),
+                        type=new_type,  # type: ignore
+                        name=new_name,
+                        content=new_content,
+                        proxied=new_proxied,
+                        comment=new_comment,
+                        ttl=new_ttl,
+                    )
+                except Exception as e:  # pylint: disable=broad-except
+                    self.app.notify(f"❌ Error creating record: {e}", severity="error")
+                    return
+                self.app.notify("✅ Record created successfully!", timeout=1)
+                self.app.pop_screen()
+            else:
+                if not self.record:
+                    self.app.notify("❌ No record to update.", severity="error")
+                    return
+
+                if not self.zone_id:
+                    self.app.notify("❌ No zone ID provided.", severity="error")
+                    return
+
+                try:
+                    cloudflare.dns.records.update(  # type: ignore
+                        self.record.id,
+                        zone_id=str(self.zone_id),
+                        type=new_type,  # type: ignore
+                        name=new_name,
+                        content=new_content,
+                        proxied=new_proxied,
+                        comment=new_comment,
+                        ttl=new_ttl,
+                    )
+                except Exception as e:  # pylint: disable=broad-except
+                    self.app.notify(f"❌ Error updating record: {e}", severity="error")
+                    return
+                self.app.notify("✅ Record updated successfully!", timeout=1)
+                self.app.pop_screen()
+        elif event.button.id == "cancel-btn":
+            self.app.pop_screen()
+
+        if cloudflare is None:
+            self.app.notify("❌ Unknown error, please log back in.", severity="error")
+            self.app.push_screen("login")
+            return
+
+
 class DnsManagementScreen(Screen):
     """DNS records management screen for a specific domain."""
 
@@ -373,6 +618,7 @@ class DnsManagementScreen(Screen):
         super().__init__()
         self.domain_id = domain_id
         self.domain_name = domain_name
+        self.dns_records = []
 
     def compose(self) -> ComposeResult:
         with Container(id="main-container"):
@@ -410,6 +656,7 @@ class DnsManagementScreen(Screen):
             return
 
         records = get_dns_records(cloudflare, self.domain_id)
+        self.dns_records = records
         records_list = self.query_one("#records-list", OptionList)
         records_list.clear_options()
 
@@ -473,10 +720,16 @@ class DnsManagementScreen(Screen):
 
     def action_add_record(self) -> None:
         """Add a new DNS record."""
-        self.app.notify(f"➕ Adding DNS record for {self.domain_name}...")
-        # TODO: add record
+        self.app.push_screen(
+            RecordManagementScreen(
+                is_create=True,
+                record=None,
+                zone_id=self.domain_id,
+            )
+        )
 
     def action_edit_record(self) -> None:
+        """Edit the selected DNS record."""
         records_list = self.query_one("#records-list", OptionList)
         selected_index = records_list.highlighted
 
@@ -484,11 +737,16 @@ class DnsManagementScreen(Screen):
             try:
                 selected_option = records_list.get_option_at_index(selected_index)
                 if selected_option and selected_option.id is not None:
-                    pass
-                    # TODO: edit record
+                    self.app.push_screen(
+                        RecordManagementScreen(
+                            is_create=False,
+                            record=self.dns_records[selected_index],
+                            zone_id=self.domain_id,
+                        )
+                    )
                 else:
                     self.app.notify("❌ Invalid record selection", severity="warning")
-            except Exception:
+            except Exception:  # pylint: disable=broad-except
                 self.app.notify("❌ Error getting selected record", severity="error")
         else:
             self.app.notify("❌ Please select a record first", severity="warning")
@@ -502,7 +760,6 @@ class DnsManagementScreen(Screen):
             try:
                 selected_option = records_list.get_option_at_index(selected_index)
                 if selected_option and selected_option.id is not None:
-                    # Show confirmation dialog
                     confirmation_screen = ConfirmationScreen(
                         f"Are you sure you want to delete this record?\n\n{selected_option.prompt}",
                         title="🗑️ Delete DNS Record",
