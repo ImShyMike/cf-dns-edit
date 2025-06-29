@@ -8,9 +8,15 @@ authors = [
 ]
 requires-python = ">=3.13"
 dependencies = [
+    "asciimatics>=1.15.0",
+    "click>=8.2.1",
     "cloudflare>=4.2.0",
     "colorama>=0.4.6",
+    "npyscreen>=4.10.5",
+    "python-dotenv>=1.1.1",
     "simple-term-menu>=1.6.6",
+    "textual>=3.5.0",
+    "urwid>=3.0.2",
 ]
 
 [project.scripts]

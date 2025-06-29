@@ -2,12 +2,13 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 from cloudflare import Client, Cloudflare
 from simple_term_menu import TerminalMenu
 
-__version__ = "0.1.0"
+from cf_dns_edit.__about__ import __version__
+
 CONFIG_FILE = "config.json"
 HOME_DIR = os.path.expanduser("~")
 CONFIG_FOLDER = "AppData/Roaming" if os.name == "nt" else ".config"
@@ -115,6 +116,7 @@ def load_all_domains(cf: Client) -> List:
     except Exception as e:  # pylint: disable=broad-except
         print(f"Failed to load domains: {e}")
         return []
+
 
 def get_dns_records(cf: Client, zone_id: str) -> List:
     """Get DNS records for a specific zone."""
