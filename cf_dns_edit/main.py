@@ -594,6 +594,7 @@ class DnsManagementScreen(Screen):
             try:
                 selected_option = records_list.get_option_at_index(selected_index)
                 if selected_option and selected_option.id is not None:
+                    pass
                     # TODO: delete record
                 else:
                     self.app.notify("❌ Invalid record selection", severity="warning")
