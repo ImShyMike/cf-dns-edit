@@ -1,0 +1,38 @@
+DomainManagementScreen {
+    layout: horizontal;
+}
+
+#main-container {
+    layout: horizontal;
+    height: 100%;
+}
+
+#button-panel {
+    width: 50%;
+    align: center middle;
+    padding: 2;
+}
+
+#info-panel {
+    width: 45%;
+    background: $surface;
+    border: solid $primary;
+    margin: 2;
+    padding: 2;
+}
+
+#info-title {
+    text-style: bold;
+    color: $primary;
+    margin-bottom: 1;
+}
+
+#domains-list {
+    height: 100%;
+    margin-top: 1;
+}
+
+.domain-btn {
+    width: 95%;
+    margin: 1;
+}

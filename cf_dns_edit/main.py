@@ -11,9 +11,9 @@ from cloudflare.types.zones.zone import Zone
 from dotenv import load_dotenv
 from textual.app import App, ComposeResult
 from textual.containers import Container, Vertical
-from textual.screen import Screen
+from textual.screen import ModalScreen, Screen
 from textual.validation import ValidationResult, Validator
-from textual.widgets import Button, Footer, Input, Link, OptionList, Static
+from textual.widgets import Button, Footer, Input, Link, OptionList, Static, TextArea
 from textual.widgets.option_list import Option
 
 from cf_dns_edit.__about__ import __version__
@@ -27,7 +27,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.ERROR)
 
-MIN_SCREEN_SIZE = (71, 30)  # magic numbers :D
+MIN_SCREEN_SIZE = (71, 25)  # magic numbers :D
 TOKEN = os.getenv("CLOUDFLARE_API_TOKEN")
 
 
@@ -98,42 +98,7 @@ class ApiTokenValidator(Validator):
 class LoginScreen(Screen):
     """Login screen for the application."""
 
-    CSS = """
-    LoginScreen {
-        align: center middle;
-        layers: base overlay;
-    }
-    
-    #login-container {
-        width: 60;
-        height: 25;
-        background: $surface;
-        border: solid $primary;
-        padding: 2;
-    }
-    
-    #login-title {
-        text-style: bold;
-        color: $primary;
-        margin-bottom: 2;
-        text-align: center;
-    }
-    
-    #token-link {
-        text-align: center;
-        width: 100%;
-    }
-
-    Button {
-        width: 100%;
-        margin: 1 0;
-    }
-    
-    Input {
-        width: 100%;
-        margin: 1 0;
-    }
-    """
+    CSS_PATH = "tcss/login.tcss"
 
     BINDINGS = [
         ("escape", "app.pop_screen", "Back"),
@@ -153,9 +118,12 @@ class LoginScreen(Screen):
                     validate_on=["changed"],
                     validators=[ApiTokenValidator()],
                     id="token-input",
+                    classes="login-input",
                 )
                 yield Static("")
-                yield Button("Login", id="login-btn", variant="primary")
+                yield Button(
+                    "Login", id="login-btn", variant="primary", classes="login-btn"
+                )
                 yield Static("")
                 yield Static(
                     "Grab an API token with scopes Zone.Zone:Read,", classes="help-text"
@@ -234,46 +202,7 @@ class LoginScreen(Screen):
 class DomainManagementScreen(Screen):
     """Main DNS management screen."""
 
-    CSS = """
-    DomainManagementScreen {
-        layout: horizontal;
-    }
-    
-    #main-container {
-        layout: horizontal;
-        height: 100%;
-    }
-    
-    #button-panel {
-        width: 50%;
-        align: center middle;
-        padding: 2;
-    }
-    
-    #info-panel {
-        width: 45%;
-        background: $surface;
-        border: solid $primary;
-        margin: 2;
-        padding: 2;
-    }
-    
-    #info-title {
-        text-style: bold;
-        color: $primary;
-        margin-bottom: 1;
-    }
-    
-    #domains-list {
-        height: 100%;
-        margin-top: 1;
-    }
-    
-    Button {
-        width: 95%;
-        margin: 1;
-    }
-    """
+    CSS_PATH = "tcss/domain_management.tcss"
 
     BINDINGS = [
         ("escape", "app.pop_screen", "Back"),
@@ -293,10 +222,12 @@ class DomainManagementScreen(Screen):
                 with Vertical():
                     yield Static("📚 DNS Records Manager", id="title")
                     yield Static("")
-                    yield Button("✏️  Manage Selected Domain", id="edit")
+                    yield Button(
+                        "✏️  Manage Selected Domain", id="edit", classes="domain-btn"
+                    )
                     yield Static("")
-                    yield Button("ℹ️  About", id="about-btn")
-                    yield Button("🚪 Logout", id="logout-btn")
+                    yield Button("ℹ️  About", id="about-btn", classes="domain-btn")
+                    yield Button("🚪 Logout", id="logout-btn", classes="domain-btn")
             with Container(id="info-panel"):
                 with Vertical():
                     yield Static("🌐 Your Cloudflare Domains", id="info-title")
@@ -423,50 +354,7 @@ class DomainManagementScreen(Screen):
 class DnsManagementScreen(Screen):
     """DNS records management screen for a specific domain."""
 
-    CSS = """
-    DnsManagementScreen {
-        layout: horizontal;
-    }
-    
-    #main-container {
-        layout: horizontal;
-        height: 100%;
-    }
-    
-    #button-panel {
-        width: 35%;
-        align: center middle;
-        padding: 2;
-    }
-
-    #records-list {
-        width: 60%;
-        background: $surface;
-        border: solid $primary;
-        margin: 2;
-        padding: 2;
-        height: 100%;
-        margin-top: 1;
-    }
-    
-    #records-list > .option-list--option {
-        color: $text;
-    }
-    
-    #records-list > .option-list--option-highlighted {
-        color: $text;
-    }
-    
-    Button {
-        width: 95%;
-        margin: 1;
-    }
-    
-    .record-info {
-        color: $text-muted;
-        text-style: italic;
-    }
-    """
+    CSS_PATH = "tcss/dns_management.tcss"
 
     BINDINGS = [
         ("escape", "back_to_domains", "Back to Domains"),
@@ -493,11 +381,19 @@ class DnsManagementScreen(Screen):
                     yield Static("📝 DNS Records", id="title")
                     yield Static(f"Domain: {self.domain_name}", classes="record-info")
                     yield Static("")
-                    yield Button("➕ Add DNS Record", id="add-record")
-                    yield Button("✏️  Edit Selected Record", id="edit-record")
-                    yield Button("🗑️  Delete Selected Record", id="delete-record")
+                    yield Button(
+                        "➕ Add DNS Record", id="add-record", classes="dns-btn"
+                    )
+                    yield Button(
+                        "✏️  Edit Selected Record", id="edit-record", classes="dns-btn"
+                    )
+                    yield Button(
+                        "🗑️  Delete Selected Record",
+                        id="delete-record",
+                        classes="dns-btn",
+                    )
                     yield Static("")
-                    yield Button("⬅️  Back to Domains", id="back-btn")
+                    yield Button("⬅️  Back to Domains", id="back-btn", classes="dns-btn")
             yield OptionList(id="records-list")
 
     def on_mount(self) -> None:
@@ -581,7 +477,6 @@ class DnsManagementScreen(Screen):
         # TODO: add record
 
     def action_edit_record(self) -> None:
-        """Edit the selected DNS record."""
         records_list = self.query_one("#records-list", OptionList)
         selected_index = records_list.highlighted
 
@@ -593,7 +488,7 @@ class DnsManagementScreen(Screen):
                     # TODO: edit record
                 else:
                     self.app.notify("❌ Invalid record selection", severity="warning")
-            except Exception:  # pylint: disable=broad-except
+            except Exception:
                 self.app.notify("❌ Error getting selected record", severity="error")
         else:
             self.app.notify("❌ Please select a record first", severity="warning")
@@ -607,14 +502,55 @@ class DnsManagementScreen(Screen):
             try:
                 selected_option = records_list.get_option_at_index(selected_index)
                 if selected_option and selected_option.id is not None:
-                    pass
-                    # TODO: delete record
+                    # Show confirmation dialog
+                    confirmation_screen = ConfirmationScreen(
+                        f"Are you sure you want to delete this record?\n\n{selected_option.prompt}",
+                        title="🗑️ Delete DNS Record",
+                    )
+                    self.app.push_screen(
+                        confirmation_screen, self._handle_delete_confirmation
+                    )
                 else:
                     self.app.notify("❌ Invalid record selection", severity="warning")
             except Exception:  # pylint: disable=broad-except
                 self.app.notify("❌ Error getting selected record", severity="error")
         else:
             self.app.notify("❌ Please select a record first", severity="warning")
+
+    def _handle_delete_confirmation(self, result) -> None:
+        """Handle the result of the delete confirmation dialog."""
+        confirmed = result is True
+        if confirmed:
+            records_list = self.query_one("#records-list", OptionList)
+            selected_index = records_list.highlighted
+
+            if selected_index is not None and selected_index >= 0:
+                try:
+                    selected_option = records_list.get_option_at_index(selected_index)
+                    if selected_option and selected_option.id is not None:
+                        cloudflare: Cloudflare | None = self.app.cf_instance  # type: ignore
+                        if cloudflare is None:
+                            self.app.notify(
+                                "❌ Unknown error, please log back in.",
+                                severity="error",
+                            )
+                            self.app.push_screen("login")
+                            return
+
+                        try:
+                            cloudflare.dns.records.delete(
+                                selected_option.id, zone_id=self.domain_id
+                            )
+                            self.app.notify("✅ Record deleted successfully!")
+                            self.load_dns_records()
+                        except Exception as e:  # pylint: disable=broad-except
+                            self.app.notify(
+                                f"❌ Error deleting record: {e}", severity="error"
+                            )
+                except Exception:  # pylint: disable=broad-except
+                    self.app.notify(
+                        "❌ Error getting selected record", severity="error"
+                    )
 
     def action_refresh_records(self) -> None:
         """Refresh the DNS records list."""
@@ -640,42 +576,7 @@ class DnsManagementScreen(Screen):
 class AboutScreen(Screen):
     """About screen with application information."""
 
-    CSS = """
-    AboutScreen {
-        align: center middle;
-    }
-    
-    #about-container {
-        width: 60;
-        height: 25;
-        background: $surface;
-        border: solid $primary;
-        padding: 2;
-    }
-    
-    #about-title {
-        text-style: bold;
-        color: $primary;
-        margin-bottom: 2;
-        text-align: center;
-    }
-    
-    .section-title {
-        text-style: bold;
-        color: $accent;
-        margin-top: 1;
-        margin-bottom: 1;
-    }
-    
-    .help-text {
-        align: center bottom;
-    }
-    
-    Button {
-        width: 100%;
-        margin: 1 0;
-    }
-    """
+    CSS_PATH = "tcss/about.tcss"
 
     BINDINGS = [
         ("escape", "app.pop_screen", "Back"),
@@ -697,11 +598,13 @@ class AboutScreen(Screen):
                 yield Static("A Textual-based terminal application to")
                 yield Static("easily manage Cloudflare DNS records.")
                 yield Static("")
-            yield Static("Press ESC to go back", classes="help-text")
+                yield Button("Press ESC to go back", id="back-btn", classes="help-text")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Button handling for the about screen."""
-        if event.button.id == "book-btn":
+        if event.button.id == "back-btn":
+            self.app.pop_screen()
+        elif event.button.id == "book-btn":
             self.app.push_screen("manage")
         elif event.button.id == "login-btn":
             self.app.push_screen("login")
@@ -724,18 +627,7 @@ class AboutScreen(Screen):
 class ScreenTooSmall(Screen):
     """Screen too small warning screen."""
 
-    CSS = """
-    ScreenTooSmall {
-        align: center middle;
-    }
-
-    #warning-title {
-        column-span: 2;
-        height: 1fr;
-        width: 1fr;
-        content-align: center middle;
-    }
-    """
+    CSS_PATH = "tcss/screen_too_small.tcss"
 
     BINDINGS = [
         ("escape", "app.quit", "Back"),
@@ -750,34 +642,85 @@ class ScreenTooSmall(Screen):
         )
 
 
+class ConfirmationScreen(ModalScreen):
+    """A modal screen for yes/no confirmations."""
+
+    CSS_PATH = "tcss/confirmation.tcss"
+
+    BINDINGS = [
+        ("escape", "dismiss", "Cancel"),
+        ("enter", "confirm", "Yes"),
+        ("y", "confirm", "Yes"),
+        ("n", "dismiss", "No"),
+        ("left", "focus_previous", "Previous"),
+        ("right", "focus_next", "Next"),
+        ("up", "focus_previous", "Previous"),
+        ("down", "focus_next", "Next"),
+    ]
+
+    def __init__(self, message: str, title: str = "⚠️ Confirmation") -> None:
+        """Initialize the confirmation screen."""
+        super().__init__()
+        self.message = message
+        self.title_text = title
+        self.result = False
+
+    def compose(self) -> ComposeResult:
+        with Container(id="confirmation-container"):
+            with Vertical():
+                yield Static(self.title_text, id="confirmation-title")
+                yield Static(self.message, id="confirmation-message")
+                with Container(id="button-container"):
+                    yield Button(
+                        "Yes",
+                        id="yes-btn",
+                        variant="error",
+                        classes="confirmation-btn error",
+                    )
+                    yield Button(
+                        "No",
+                        id="no-btn",
+                        variant="default",
+                        classes="confirmation-btn default",
+                    )
+
+    def on_mount(self) -> None:
+        """Set initial focus to the No button for safety."""
+        no_btn = self.query_one("#no-btn", Button)
+        no_btn.focus()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle button presses."""
+        if event.button.id == "yes-btn":
+            self.result = True
+            self.dismiss(True)
+        elif event.button.id == "no-btn":
+            self.result = False
+            self.dismiss(False)
+
+    def action_confirm(self) -> None:
+        """Confirm action (Yes)."""
+        self.result = True
+        self.dismiss(True)
+
+    async def action_dismiss(self, result=None) -> None:
+        """Dismiss action (No/Cancel)."""
+        self.result = False
+        self.dismiss(False)
+
+    def action_focus_next(self) -> None:
+        """Move focus to the next focusable widget."""
+        self.focus_next()
+
+    def action_focus_previous(self) -> None:
+        """Move focus to the previous focusable widget."""
+        self.focus_previous()
+
+
 class CFDNSEditApp(App):
     """A multi-screen Textual app for CF DNS editing."""
 
-    CSS = """
-    Container {
-        align: center middle;
-    }
-    
-    Screen {
-        layers: main overlay;
-    }
-    
-    #warning-container {
-        layer: overlay;
-        align: center middle;
-        text-align: center;
-        color: red;
-        background: black;
-        width: 100%;
-        height: 100%;
-    }
-    
-    .help-text {
-        color: $text-muted;
-        text-align: center;
-        text-style: italic;
-    }
-    """
+    CSS_PATH = "tcss/main.tcss"
 
     BINDINGS = [
         ("ctrl+c", "quit", "Quit"),

@@ -1,0 +1,42 @@
+DnsManagementScreen {
+    layout: horizontal;
+}
+
+#main-container {
+    layout: horizontal;
+    height: 100%;
+}
+
+#button-panel {
+    width: 35%;
+    align: center middle;
+    padding: 2;
+}
+
+#records-list {
+    width: 60%;
+    background: $surface;
+    border: solid $primary;
+    margin: 2;
+    padding: 2;
+    height: 100%;
+    margin-top: 1;
+}
+
+#records-list > .option-list--option {
+    color: $text;
+}
+
+#records-list > .option-list--option-highlighted {
+    color: $text;
+}
+
+.dns-btn {
+    width: 95%;
+    margin: 1;
+}
+
+.record-info {
+    color: $text-muted;
+    text-style: italic;
+}

@@ -1,0 +1,35 @@
+AboutScreen {
+    align: center middle;
+}
+
+#about-container {
+    width: 60;
+    height: 25;
+    background: $surface;
+    border: solid $primary;
+    padding: 2;
+}
+
+#about-title {
+    text-style: bold;
+    color: $primary;
+    margin-bottom: 2;
+    text-align: center;
+}
+
+.section-title {
+    text-style: bold;
+    color: $accent;
+    margin-top: 1;
+    margin-bottom: 1;
+}
+
+.help-text {
+    align: center bottom;
+    text-align: center;
+}
+
+.about-btn {
+    width: 100%;
+    margin: 1 0;
+}

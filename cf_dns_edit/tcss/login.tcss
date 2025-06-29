@@ -1,0 +1,34 @@
+LoginScreen {
+    align: center middle;
+    layers: base overlay;
+}
+
+#login-container {
+    width: 60;
+    height: 25;
+    background: $surface;
+    border: solid $primary;
+    padding: 2;
+}
+
+#login-title {
+    text-style: bold;
+    color: $primary;
+    margin-bottom: 2;
+    text-align: center;
+}
+
+#token-link {
+    text-align: center;
+    width: 100%;
+}
+
+.login-btn {
+    width: 100%;
+    margin: 1 0;
+}
+
+.login-input {
+    width: 100%;
+    margin: 1 0;
+}

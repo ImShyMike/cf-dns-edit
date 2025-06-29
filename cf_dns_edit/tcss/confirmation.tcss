@@ -1,0 +1,44 @@
+ConfirmationScreen {
+    align: center middle;
+}
+
+#confirmation-container {
+    width: 80;
+    height: 17;
+    background: $surface;
+    border: solid $primary;
+    padding: 2;
+}
+
+#confirmation-title {
+    text-style: bold;
+    color: $warning;
+    margin-bottom: 2;
+    text-align: center;
+}
+
+#confirmation-message {
+    text-align: center;
+    margin-bottom: 2;
+}
+
+#button-container {
+    layout: horizontal;
+    align: center middle;
+    margin-top: 1;
+}
+
+.confirmation-btn {
+    width: 45%;
+    margin: 0 2;
+}
+
+.confirmation-btn.error {
+    background: $error;
+    color: $text;
+}
+
+.confirmation-btn.default {
+    background: $surface-lighten-1;
+    color: $text;
+}
