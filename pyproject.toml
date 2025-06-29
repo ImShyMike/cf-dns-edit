@@ -1,6 +1,6 @@
 [project]
 name = "cf-dns-edit"
-version = "0.1.0"
+version = "0.2.2"
 description = "TUI to edit DNS records for cloudflare domains"
 readme = "README.md"
 authors = [
@@ -8,20 +8,18 @@ authors = [
 ]
 requires-python = ">=3.13"
 dependencies = [
-    "asciimatics>=1.15.0",
     "click>=8.2.1",
     "cloudflare>=4.2.0",
-    "colorama>=0.4.6",
-    "npyscreen>=4.10.5",
     "python-dotenv>=1.1.1",
-    "simple-term-menu>=1.6.6",
     "textual>=3.5.0",
-    "urwid>=3.0.2",
 ]
 
 [project.scripts]
-cf-dns-edit = "cf_dns_edit:main"
+cf-dns-edit = "cf_dns_edit:cli"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["cf_dns_edit"]

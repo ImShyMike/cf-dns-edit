@@ -10,7 +10,7 @@ from cloudflare import Cloudflare
 from cloudflare.types.zones.zone import Zone
 from dotenv import load_dotenv
 from textual.app import App, ComposeResult
-from textual.containers import Container, Vertical, Horizontal
+from textual.containers import Container, Horizontal, Vertical
 from textual.screen import ModalScreen, Screen
 from textual.validation import Integer, ValidationResult, Validator
 from textual.widgets import (
@@ -39,6 +39,31 @@ logging.getLogger("httpx").setLevel(logging.ERROR)
 
 MIN_SCREEN_SIZE = (71, 25)  # magic numbers :D
 TOKEN = os.getenv("CLOUDFLARE_API_TOKEN")
+VALID_TYPES = [
+    "A",
+    "AAAA",
+    "CNAME",
+    "MX",
+    "DKIM",
+    "SPF",
+    "DMARC",
+    "TXT",
+    "CAA",
+    "SRV",
+    "SVCB",
+    "HTTPS",
+    "URI",
+    "PTR",
+    "NAPTR",
+    "SOA",
+    "NS",
+    "DS",
+    "DNSKEY",
+    "SSHFP",
+    "TLSA",
+    "SMIMEA",
+    "CERT",
+]
 
 
 def pluralize(count: int, word: str) -> str:
@@ -182,6 +207,7 @@ class LoginScreen(Screen):
             self.app.notify(
                 "❌ Invalid api key, please try again.", severity="error", timeout=2
             )
+            token_input.value = ""
 
     def action_login(self) -> None:
         """Handle login action."""
@@ -374,32 +400,7 @@ class RecordValidator(Validator):
 
     def validate(self, value: str) -> ValidationResult:
         """Check if the record type is valid."""
-        valid_types = [
-            "A",
-            "AAAA",
-            "CNAME",
-            "MX",
-            "DKIM",
-            "SPF",
-            "DMARC",
-            "TXT",
-            "CAA",
-            "SRV",
-            "SVCB",
-            "HTTPS",
-            "URI",
-            "PTR",
-            "NAPTR",
-            "SOA",
-            "NS",
-            "DS",
-            "DNSKEY",
-            "SSHFP",
-            "TLSA",
-            "SMIMEA",
-            "CERT",
-        ]
-        if value.strip().upper() in valid_types:
+        if value.strip().upper() in VALID_TYPES:
             return self.success()
         return self.failure("Invalid record type.")
 
@@ -419,12 +420,13 @@ class RecordManagementScreen(Screen):
         ("enter", "click_focused_button", "Click Button"),
     ]
 
-    def __init__(self, is_create: bool, record=None, zone_id=None) -> None:
+    def __init__(self, is_create: bool, record=None, zone_id=None, reload=None) -> None:
         """Initialize the record management screen."""
         super().__init__()
         self.is_create = is_create  # create or edit
-        self.zone_id = zone_id  # type: ignore
-        self.record = record  # type: ignore
+        self.zone_id = zone_id
+        self.record = record
+        self.reload = reload
 
     def compose(self) -> ComposeResult:
         yield Static(
@@ -453,7 +455,9 @@ class RecordManagementScreen(Screen):
                     classes="record-label",
                 )
                 yield Switch(
-                    value=self.record.proxied if self.record and self.record.proxied else False,
+                    value=bool(self.record.proxied)
+                    if self.record and self.record.proxied is not None
+                    else False,
                     animate=True,
                     id="proxied-switch",
                     classes="record-input",
@@ -478,14 +482,17 @@ class RecordManagementScreen(Screen):
                     classes="record-label",
                 )
                 yield Input(
-                    value=str(self.record.ttl) if self.record and self.record.ttl else "1",
+                    value=str(self.record.ttl)
+                    if self.record and self.record.ttl
+                    else "1",
                     placeholder="1",
                     id="record-ttl-input",
                     classes="record-input",
                     validate_on=["changed"],
                     validators=[
                         Integer(
-                            failure_description="TTL must be a positive number", minimum=1
+                            failure_description="TTL must be a positive number",
+                            minimum=1,
                         )
                     ],
                 )
@@ -557,11 +564,12 @@ class RecordManagementScreen(Screen):
                         comment=new_comment,
                         ttl=new_ttl,
                     )
+                    if self.reload:
+                        self.reload()
                 except Exception as e:  # pylint: disable=broad-except
                     self.app.notify(f"❌ Error creating record: {e}", severity="error")
                     return
                 self.app.notify("✅ Record created successfully!", timeout=1)
-                self.app.pop_screen()
             else:
                 if not self.record:
                     self.app.notify("❌ No record to update.", severity="error")
@@ -582,11 +590,13 @@ class RecordManagementScreen(Screen):
                         comment=new_comment,
                         ttl=new_ttl,
                     )
+                    if self.reload:
+                        self.reload()
                 except Exception as e:  # pylint: disable=broad-except
                     self.app.notify(f"❌ Error updating record: {e}", severity="error")
                     return
                 self.app.notify("✅ Record updated successfully!", timeout=1)
-                self.app.pop_screen()
+            self.app.pop_screen()
         elif event.button.id == "cancel-btn":
             self.app.pop_screen()
 
@@ -725,6 +735,7 @@ class DnsManagementScreen(Screen):
                 is_create=True,
                 record=None,
                 zone_id=self.domain_id,
+                reload=self.load_dns_records,
             )
         )
 
@@ -742,6 +753,7 @@ class DnsManagementScreen(Screen):
                             is_create=False,
                             record=self.dns_records[selected_index],
                             zone_id=self.domain_id,
+                            reload=self.load_dns_records,
                         )
                     )
                 else:
@@ -1016,6 +1028,7 @@ class CFDNSEditApp(App):
                     timeout=2,
                 )
                 self.cf_instance = None
+                token_input = self.query_one("#token-input", Input).value = ""
                 self.push_screen("login")
         else:
             self.push_screen("login")
