@@ -27,7 +27,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.ERROR)
 
-MIN_SCREEN_SIZE = (71, 32)  # magic numbers :D
+MIN_SCREEN_SIZE = (71, 30)  # magic numbers :D
 TOKEN = os.getenv("CLOUDFLARE_API_TOKEN")
 
 
@@ -139,6 +139,7 @@ class LoginScreen(Screen):
         ("escape", "app.pop_screen", "Back"),
         ("ctrl+c", "app.quit", "Quit"),
         ("enter", "login", "Login"),
+        ("right", "click_focused_button", "Click Button"),
     ]
 
     def compose(self) -> ComposeResult:
@@ -208,6 +209,12 @@ class LoginScreen(Screen):
         """Handle login action."""
         self.call_next(self.handle_login)
 
+    def action_click_focused_button(self) -> None:
+        """Click the currently focused button."""
+        focused = self.focused
+        if isinstance(focused, Button):
+            focused.press()
+
     async def verify_token(self, token: str) -> bool:
         """Verify the API token asynchronously."""
         try:
@@ -275,6 +282,9 @@ class DomainManagementScreen(Screen):
         ("l", "logout", "Logout"),
         ("e", "edit_domain", "Edit Domain"),
         ("r", "refresh_domains", "Refresh Domains"),
+        ("right", "move_to_list", "Move to List"),
+        ("left", "move_to_buttons", "Move to Buttons"),
+        ("enter", "click_focused_button", "Click Button"),
     ]
 
     def compose(self) -> ComposeResult:
@@ -283,7 +293,7 @@ class DomainManagementScreen(Screen):
                 with Vertical():
                     yield Static("📚 DNS Records Manager", id="title")
                     yield Static("")
-                    yield Button("✏️  Manage DNS Records", id="edit")
+                    yield Button("✏️  Manage Selected Domain", id="edit")
                     yield Static("")
                     yield Button("ℹ️  About", id="about-btn")
                     yield Button("🚪 Logout", id="logout-btn")
@@ -393,6 +403,22 @@ class DomainManagementScreen(Screen):
         """Refresh the domain list."""
         self.load_domains()
 
+    def action_click_focused_button(self) -> None:
+        """Click the currently focused button."""
+        focused = self.focused
+        if isinstance(focused, Button):
+            focused.press()
+
+    def action_move_to_list(self) -> None:
+        """Move focus to the domains list."""
+        domains_list = self.query_one("#domains-list", OptionList)
+        domains_list.focus()
+
+    def action_move_to_buttons(self) -> None:
+        """Move focus to the buttons panel."""
+        edit_btn = self.query_one("#edit", Button)
+        edit_btn.focus()
+
 
 class DnsManagementScreen(Screen):
     """DNS records management screen for a specific domain."""
@@ -412,22 +438,13 @@ class DnsManagementScreen(Screen):
         align: center middle;
         padding: 2;
     }
-    
-    #records-panel {
-        width: 65%;
+
+    #records-list {
+        width: 60%;
         background: $surface;
         border: solid $primary;
         margin: 2;
         padding: 2;
-    }
-    
-    #records-title {
-        text-style: bold;
-        color: $primary;
-        margin-bottom: 1;
-    }
-    
-    #records-list {
         height: 100%;
         margin-top: 1;
     }
@@ -458,6 +475,9 @@ class DnsManagementScreen(Screen):
         ("e", "edit_record", "Edit Record"),
         ("d", "delete_record", "Delete Record"),
         ("r", "refresh_records", "Refresh Records"),
+        ("right", "move_to_list", "Move to List"),
+        ("left", "move_to_buttons", "Move to Buttons"),
+        ("enter", "click_focused_button", "Click Button"),
     ]
 
     def __init__(self, domain_id: str, domain_name: str) -> None:
@@ -476,16 +496,9 @@ class DnsManagementScreen(Screen):
                     yield Button("➕ Add DNS Record", id="add-record")
                     yield Button("✏️  Edit Selected Record", id="edit-record")
                     yield Button("🗑️  Delete Selected Record", id="delete-record")
-                    yield Button("🔄 Refresh Records", id="refresh-records")
                     yield Static("")
                     yield Button("⬅️  Back to Domains", id="back-btn")
-            with Container(id="records-panel"):
-                with Vertical():
-                    yield Static(
-                        f"📋 DNS Records for {self.domain_name}", id="records-title"
-                    )
-                    yield Static("")
-                    yield OptionList(id="records-list")
+            yield OptionList(id="records-list")
 
     def on_mount(self) -> None:
         """Load DNS records when the screen is mounted."""
@@ -607,6 +620,22 @@ class DnsManagementScreen(Screen):
         """Refresh the DNS records list."""
         self.load_dns_records()
 
+    def action_click_focused_button(self) -> None:
+        """Click the currently focused button."""
+        focused = self.focused
+        if isinstance(focused, Button):
+            focused.press()
+
+    def action_move_to_list(self) -> None:
+        """Move focus to the records list."""
+        records_list = self.query_one("#records-list", OptionList)
+        records_list.focus()
+
+    def action_move_to_buttons(self) -> None:
+        """Move focus to the buttons panel."""
+        add_btn = self.query_one("#add-record", Button)
+        add_btn.focus()
+
 
 class AboutScreen(Screen):
     """About screen with application information."""
@@ -653,6 +682,7 @@ class AboutScreen(Screen):
         ("ctrl+c", "app.quit", "Quit"),
         ("b", "manage", "manage"),
         ("l", "login", "Login"),
+        ("right", "click_focused_button", "Click Button"),
     ]
 
     def compose(self) -> ComposeResult:
@@ -684,6 +714,12 @@ class AboutScreen(Screen):
         """Go to login screen."""
         self.app.push_screen("login")
 
+    def action_click_focused_button(self) -> None:
+        """Click the currently focused button."""
+        focused = self.focused
+        if isinstance(focused, Button):
+            focused.press()
+
 
 class ScreenTooSmall(Screen):
     """Screen too small warning screen."""
@@ -700,6 +736,11 @@ class ScreenTooSmall(Screen):
         content-align: center middle;
     }
     """
+
+    BINDINGS = [
+        ("escape", "app.quit", "Back"),
+        ("ctrl+c", "app.quit", "Quit"),
+    ]
 
     def compose(self) -> ComposeResult:
         yield Static("⚠️  Terminal too small!", id="warning-title")
@@ -794,7 +835,7 @@ class CFDNSEditApp(App):
                 self.pop_screen()
 
     def compose(self) -> ComposeResult:
-        """Compose the main app - screens will handle their own composition."""
+        """Compose the main app."""
         yield Footer()
 
     async def action_quit(self) -> None:
@@ -803,17 +844,11 @@ class CFDNSEditApp(App):
 
     def action_select_action(self) -> None:
         """Handle right arrow key."""
-        current_screen = self.screen
-        if isinstance(current_screen, LoginScreen):
-            if self.focused is not current_screen.query_one("#token-link", Link):
-                current_screen.action_login()
-            else:
-                focused_link = current_screen.query_one("#token-link", Link)
-                focused_link.action_open_link()
-        elif isinstance(current_screen, DomainManagementScreen):
-            self.notify("Use buttons or keyboard shortcuts for actions")
-        elif isinstance(current_screen, AboutScreen):
-            self.push_screen("manage")
+        focused = self.focused
+        if isinstance(focused, Button):
+            focused.press()
+        elif isinstance(focused, Link):
+            focused.action_open_link()
 
     def action_navigate_up(self) -> None:
         """Handle up arrow key."""
