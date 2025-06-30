@@ -1,12 +1,12 @@
 [project]
 name = "cf-dns-edit"
-version = "0.2.3"
+version = "0.2.5"
 description = "TUI to edit DNS records for cloudflare domains"
 readme = "README.md"
 authors = [
     { name = "ShyMike", email = "122023566+ImShyMike@users.noreply.github.com" }
 ]
-requires-python = ">=3.13"
+requires-python = ">=3.11"
 dependencies = [
     "click>=8.2.1",
     "cloudflare>=4.2.0",
